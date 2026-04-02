@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hard Mode Tool-Calling Benchmark — Orinn vs Gemini</title>
+<meta property="og:title" content="Orinn-1.6 (97%) vs Gemini 3.1 Pro (93%) — Hard Mode Tool-Calling">
+<meta property="og:description" content="7-suite benchmark across 20 hard tests: implicit reasoning, messy narratives, safety ordering, dependency chains, distractor resistance, repeated calls, parameter precision.">
+<meta property="og:type" content="article">
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Instrument+Serif&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #EFEEF9;
+    --bg2: #FFFFFF;
+    --bg3: #F6F5FC;
+    --bg4: #E8E7F3;
+    --border: #D4D2E8;
+    --border-light: #E8E7F3;
+    --text: #1a1a2e;
+    --text-secondary: #4a4868;
+    --dim: #8886a5;
+    --cyan: #0891b2;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --blue: #2563eb;
+    --indigo: #4f46e5;
+    --orinn-accent: #059669;
+    --gemini-accent: #2563eb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code, .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    padding: 3.5rem 2rem 2.5rem;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header .badge {
+    display: inline-block;
+    padding: 0.35rem 1.2rem;
+    border-radius: 100px;
+    background: var(--purple-light);
+    color: var(--purple);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.2rem;
+  }
+
+  .header h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 3rem;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.6rem;
+  }
+
+  .header .subtitle {
+    color: var(--dim);
+    font-size: 0.95rem;
+    font-weight: 400;
+  }
+
+  /* ── Tabs ── */
+  .tab-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 2rem 0;
+  }
+
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 2rem;
+  }
+
+  .tab-btn {
+    padding: 0.9rem 2.5rem;
+    border: none;
+    background: none;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--dim);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+
+  .tab-btn.active-orinn {
+    color: var(--orinn-accent);
+    border-bottom-color: var(--orinn-accent);
+  }
+
+  .tab-btn.active-gemini {
+    color: var(--gemini-accent);
+    border-bottom-color: var(--gemini-accent);
+  }
+
+  .tab-btn .grade-pip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .tab-btn .grade-pip.orinn-pip { background: var(--green-light); color: var(--green); }
+  .tab-btn .grade-pip.gemini-pip { background: #dbeafe; color: var(--blue); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Score Cards ── */
+  .scores {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .score-card {
+    padding: 1.3rem 1rem;
+    text-align: center;
+    border-right: 1px solid var(--border-light);
+  }
+
+  .score-card:last-child { border-right: none; }
+
+  .score-card .value {
+    font-size: 1.9rem;
+    font-weight: 800;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .score-card .label {
+    font-size: 0.62rem;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.25rem;
+    font-weight: 600;
+  }
+
+  /* ── Cards & Grid ── */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+
+  .card h3 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .plotly-chart { width: 100%; height: 320px; }
+  .table-card { grid-column: 1 / -1; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+
+  th {
+    padding: 0.6rem 0.7rem;
+    text-align: right;
+    font-weight: 700;
+    color: var(--dim);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border);
+  }
+
+  th:first-child, th:nth-child(2) { text-align: left; }
+
+  td {
+    padding: 0.55rem 0.7rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border-light);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  td:first-child, td:nth-child(2) {
+    text-align: left;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  tr:hover td { background: var(--bg3); }
+  .pass { color: var(--green); font-weight: 700; }
+  .fail { color: var(--red); font-weight: 700; }
+  .warn { color: var(--yellow); font-weight: 700; }
+
+  /* ── Detail section ── */
+  .detail-section { margin-top: 0.5rem; }
+  .detail-item { margin: 3px 0; font-size: 0.72rem; color: var(--text-secondary); }
+  .arg-ok { color: var(--green); font-weight: 600; }
+  .arg-fail { color: var(--red); font-weight: 600; }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    color: var(--dim);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+    background: var(--bg2);
+  }
+
+  @media (max-width: 768px) {
+    .header h1 { font-size: 2rem; }
+    .scores { grid-template-columns: repeat(3, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+    .tab-btn { padding: 0.7rem 1.2rem; font-size: 0.85rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="badge">Hard Mode Tool-Calling Benchmark</div>
+  <h1>Orinn-1.6 vs Gemini 3.1 Pro</h1>
+  <div class="subtitle">7 suites &nbsp;·&nbsp; 20 tests &nbsp;·&nbsp; Implicit reasoning, safety ordering, parameter precision & more</div>
+</div>
+
+<div class="tab-container">
+  <div class="tab-bar">
+    <button class="tab-btn active-orinn" onclick="switchTab('orinn')" id="tab-orinn">
+      Orinn-1.6
+      <span class="grade-pip orinn-pip">97% · A+</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('gemini')" id="tab-gemini">
+      Gemini 3.1 Pro
+      <span class="grade-pip gemini-pip">93% · A+</span>
+    </button>
+  </div>
+
+  <!-- ═══ ORINN TAB ═══ -->
+  <div class="tab-panel active" id="panel-orinn">
+    <div class="scores" id="scores-orinn"></div>
+    <div class="grid">
+      <div class="card table-card">
+        <h3>All Test Results</h3>
+        <table><thead><tr>
+          <th style="text-align:left">ID</th><th style="text-align:left">Test</th>
+          <th>Overall</th><th>Tools</th><th>Args</th><th>OverCall</th><th>Order</th><th>Time</th><th>Verdict</th>
+        </tr></thead><tbody id="tbody-orinn"></tbody></table>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card table-card"><h3>Per-Tool Call Detail</h3><div id="detail-orinn" class="detail-section"></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ GEMINI TAB ═══ -->
+  <div class="tab-panel" id="panel-gemini">
+    <div class="scores" id="scores-gemini"></div>
+    <div class="grid">
+      <div class="card table-card">
+        <h3>All Test Results</h3>
+        <table><thead><tr>
+          <th style="text-align:left">ID</th><th style="text-align:left">Test</th>
+          <th>Overall</th><th>Tools</th><th>Args</th><th>OverCall</th><th>Order</th><th>Time</th><th>Verdict</th>
+        </tr></thead><tbody id="tbody-gemini"></tbody></table>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card table-card"><h3>Per-Tool Call Detail</h3><div id="detail-gemini" class="detail-section"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Hard Mode Tool-Calling Benchmark &nbsp;·&nbsp; 7 Suites &nbsp;·&nbsp; 20 Tests &nbsp;·&nbsp; Orinn vs Gemini
+</div>
+
+<script>
+// ═══ DATA ═══
+const ORINN_R = [{"id": "IMP-1", "name": "Implicit: Metabolic Risk Assessment", "suite": "1. Implicit Tool Calling", "overall": 86.8, "tool_selection": 66.7, "arg_precision": 100.0, "over_calling_penalty": 10.0, "safety_order": 100.0, "time": 10.45, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 94, "height_cm": 160}}, {"name": "get_lab_reference_range", "args": {"test_name": "fasting glucose", "patient_age": 52, "patient_sex": "female"}}, {"name": "get_patient_history", "args": {"patient_id": "P-2001", "history_type": "conditions"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "get_lab_reference_range", "called": true, "score": 100.0, "args_correct": {"test_name": true}, "optional": false}, {"tool": "order_lab_test", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "get_clinical_guidelines", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "IMP-2", "name": "Implicit: Stroke Risk in AFib Patient", "suite": "1. Implicit Tool Calling", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 17.54, "calls": [{"name": "calculate_chadsvasc_score", "args": {"age": 71, "sex": "male", "chf": false, "hypertension": true, "stroke_history": false, "vascular_disease": false, "diabetes": true}}, {"name": "get_clinical_guidelines", "args": {"condition": "atrial fibrillation", "guideline_source": "AHA"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_chadsvasc_score", "called": true, "score": 100.0, "args_correct": {"age": true, "sex": true, "hypertension": true, "diabetes": true, "stroke_history": true, "chf": true, "vascular_disease": true}, "optional": false}, {"tool": "get_clinical_guidelines", "called": true, "score": 100.0, "args_correct": {"condition": true}, "optional": false}, {"tool": "get_drug_info", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "IMP-3", "name": "Implicit: Worried Parent with Sick Child Symptoms", "suite": "1. Implicit Tool Calling", "overall": 89.7, "tool_selection": 100.0, "arg_precision": 83.3, "over_calling_penalty": 30.0, "safety_order": 100.0, "time": 17.77, "calls": [{"name": "get_differential_diagnosis", "args": {"symptoms": ["high fever", "sore throat", "rash on trunk"], "patient_age": 8}}, {"name": "order_lab_test", "args": {"test_name": "Complete Blood Count", "patient_id": "P-2003", "urgency": "urgent", "fasting_required": false}}, {"name": "order_lab_test", "args": {"test_name": "Rapid Strep Test", "patient_id": "P-2003", "urgency": "urgent", "fasting_required": false}}, {"name": "order_lab_test", "args": {"test_name": "C-Reactive Protein", "patient_id": "P-2003", "urgency": "urgent", "fasting_required": false}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_differential_diagnosis", "called": true, "score": 66.7, "args_correct": {"symptoms": true, "patient_age": true, "patient_sex": false}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "urgency": true}, "optional": false}, {"tool": "flag_critical_result", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "NAR-1", "name": "Narrative: Rambling Doctor Note", "suite": "2. Messy Narrative Extraction", "overall": 89.0, "tool_selection": 75.0, "arg_precision": 100.0, "over_calling_penalty": 15.0, "safety_order": 100.0, "time": 22.17, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 82, "height_cm": 163}}, {"name": "calculate_egfr", "args": {"creatinine": 1.3, "age": 67, "sex": "female"}}, {"name": "get_dosage_recommendation", "args": {"drug_name": "metformin", "patient_weight_kg": 82, "patient_age": 67}}, {"name": "get_drug_info", "args": {"drug_name": "metformin"}}, {"name": "schedule_followup", "args": {"patient_id": "P-3001", "days_from_now": 90, "reason": "Diabetes management follow-up", "provider": "Dr. Patel"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "schedule_followup", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "days_from_now": true, "provider": true}, "optional": false}]}, {"id": "NAR-2", "name": "Narrative: Abbreviation-Heavy Clinical Note", "suite": "2. Messy Narrative Extraction", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 26.66, "calls": [{"name": "calculate_egfr", "args": {"creatinine": 2.1, "age": 55, "sex": "male"}}, {"name": "calculate_bmi", "args": {"weight_kg": 91, "height_cm": 175}}, {"name": "flag_critical_result", "args": {"patient_id": "P-3002", "result_type": "potassium", "value": "5.6", "severity": "critical"}}, {"name": "check_drug_interactions", "args": {"drug_a": "lisinopril", "drug_b": "metformin"}}, {"name": "create_referral", "args": {"patient_id": "P-3002", "specialty": "nephrology", "reason": "CKD3 with elevated creatinine (2.1 mg/dL) and hyperkalemia (K+ 5.6)", "urgency": "urgent"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "create_referral", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "specialty": true, "urgency": true}, "optional": false}]}, {"id": "SAF-1", "name": "Safety: Allergy Check Before Prescribing", "suite": "3. Safety-First Ordering", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 8.18, "calls": [{"name": "check_allergy_cross_reactivity", "args": {"known_allergy": "penicillin", "proposed_drug": "amoxicillin"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_allergy_cross_reactivity", "called": true, "score": 100.0, "args_correct": {"known_allergy": true, "proposed_drug": true}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "SAF-2", "name": "Safety: Interaction Check Before New Drug", "suite": "3. Safety-First Ordering", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 6.65, "calls": [{"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "ibuprofen"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "get_patient_history", "called": false, "score": 0.0, "args_correct": {}, "optional": true}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "SAF-3", "name": "Safety: Critical Lab Value Flagging", "suite": "3. Safety-First Ordering", "overall": 95.5, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 30.0, "safety_order": 100.0, "time": 20.17, "calls": [{"name": "flag_critical_result", "args": {"patient_id": "P-4003", "result_type": "Potassium", "value": "6.8 mEq/L", "severity": "life_threatening"}}, {"name": "flag_critical_result", "args": {"patient_id": "P-4003", "result_type": "Creatinine", "value": "4.2 mg/dL", "severity": "critical"}}, {"name": "flag_critical_result", "args": {"patient_id": "P-4003", "result_type": "Sodium", "value": "129 mEq/L", "severity": "critical"}}, {"name": "calculate_egfr", "args": {"creatinine": 4.2, "age": 60, "sex": "male"}}, {"name": "get_lab_reference_range", "args": {"test_name": "Potassium", "patient_age": 60, "patient_sex": "male"}}, {"name": "get_lab_reference_range", "args": {"test_name": "Sodium", "patient_age": 60, "patient_sex": "male"}}, {"name": "get_lab_reference_range", "args": {"test_name": "Creatinine", "patient_age": 60, "patient_sex": "male"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": true}]}, {"id": "DEP-1", "name": "Dependency: eGFR \u2192 Dose Adjustment", "suite": "4. Tool Dependency Chains", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 13.94, "calls": [{"name": "calculate_egfr", "args": {"creatinine": 2.8, "age": 70, "sex": "male"}}, {"name": "get_dosage_recommendation", "args": {"drug_name": "vancomycin", "patient_weight_kg": 75, "patient_age": 70, "renal_function": "severe"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "get_dosage_recommendation", "called": true, "score": 100.0, "args_correct": {"drug_name": true, "patient_weight_kg": true, "renal_function": true}, "optional": false}]}, {"id": "DEP-2", "name": "Dependency: History \u2192 Interaction Check \u2192 Prescription", "suite": "4. Tool Dependency Chains", "overall": 75.2, "tool_selection": 33.3, "arg_precision": 100.0, "over_calling_penalty": 10.0, "safety_order": 100.0, "time": 12.1, "calls": [{"name": "get_patient_history", "args": {"patient_id": "P-5002", "history_type": "medications"}}, {"name": "get_patient_history", "args": {"patient_id": "P-5002", "history_type": "allergies"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_patient_history", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "history_type": true}, "optional": false}, {"tool": "check_drug_interactions", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": false}]}, {"id": "DIS-1", "name": "Distractor: Simple BMI (20 tools available)", "suite": "5. Distractor Resistance", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 3.65, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 70, "height_cm": 170}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}]}, {"id": "DIS-2", "name": "Distractor: Referral Only (20 tools available)", "suite": "5. Distractor Resistance", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 7.44, "calls": [{"name": "create_referral", "args": {"patient_id": "P-6002", "specialty": "dermatology", "reason": "suspicious mole", "urgency": "routine"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "create_referral", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "specialty": true, "urgency": true}, "optional": false}]}, {"id": "DIS-3", "name": "Distractor: 3 of 20 Needed", "suite": "5. Distractor Resistance", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 11.12, "calls": [{"name": "order_lab_test", "args": {"test_name": "CBC", "patient_id": "P-6003", "urgency": "stat"}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-6003", "vital_type": "blood_pressure", "days_back": 7}}, {"name": "send_patient_message", "args": {"patient_id": "P-6003", "subject": "Appointment Reminder", "message": "Please arrive 15 minutes early for your appointment tomorrow", "urgency": "normal"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "send_patient_message", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "subject": true, "urgency": true}, "optional": false}]}, {"id": "REP-1", "name": "Repeated: Check 4 Drug Interactions", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 7.26, "calls": [{"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "aspirin"}}, {"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "metformin"}}, {"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "lisinopril"}}, {"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "omeprazole"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}]}, {"id": "REP-2", "name": "Repeated: 3 Different Lab Orders", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 13.05, "calls": [{"name": "order_lab_test", "args": {"test_name": "CBC", "patient_id": "P-7002", "urgency": "routine", "fasting_required": false}}, {"name": "order_lab_test", "args": {"test_name": "Comprehensive Metabolic Panel", "patient_id": "P-7002", "urgency": "urgent", "fasting_required": false}}, {"name": "order_lab_test", "args": {"test_name": "Troponin I", "patient_id": "P-7002", "urgency": "stat", "fasting_required": false}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}]}, {"id": "REP-3", "name": "Repeated: Multiple Vitals Trends", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 9.34, "calls": [{"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "vital_type": "blood_pressure", "days_back": 14}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "vital_type": "heart_rate", "days_back": 14}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "vital_type": "temperature", "days_back": 14}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "vital_type": "spo2", "days_back": 14}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}]}, {"id": "PRC-1", "name": "Precision: Don't Swap Height and Weight", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 6.1, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 68, "height_cm": 172}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}]}, {"id": "PRC-2", "name": "Precision: Correct Drug Ordering in Interaction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 6.31, "calls": [{"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "ibuprofen"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}]}, {"id": "PRC-3", "name": "Precision: Allergy vs Proposed Drug Direction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 5.19, "calls": [{"name": "check_allergy_cross_reactivity", "args": {"known_allergy": "sulfa", "proposed_drug": "furosemide"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_allergy_cross_reactivity", "called": true, "score": 100.0, "args_correct": {"known_allergy": true, "proposed_drug": true}, "optional": false}]}, {"id": "PRC-4", "name": "Precision: Complex Multi-Arg Extraction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 11.68, "calls": [{"name": "schedule_followup", "args": {"patient_id": "P-8001", "days_from_now": 42, "reason": "post-surgical recovery review", "provider": "Dr. Nakamura"}}, {"name": "send_patient_message", "args": {"patient_id": "P-8001", "subject": "Surgery Follow-up Scheduled", "message": "Your follow-up has been scheduled in 6 weeks. Please bring your medication list.", "urgency": "high"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "schedule_followup", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "days_from_now": true, "provider": true}, "optional": false}, {"tool": "send_patient_message", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "subject": true, "urgency": true}, "optional": false}]}];
+const GEMINI_R = [{"id": "IMP-1", "name": "Implicit: Metabolic Risk Assessment", "suite": "1. Implicit Tool Calling", "overall": 85.3, "tool_selection": 66.7, "arg_precision": 100.0, "over_calling_penalty": 20.0, "safety_order": 100.0, "time": 7.48, "calls": [{"name": "calculate_bmi", "args": {"height_cm": 160, "weight_kg": 94}}, {"name": "get_lab_reference_range", "args": {"patient_age": 52, "test_name": "fasting glucose", "patient_sex": "female"}}, {"name": "get_patient_history", "args": {"patient_id": "P-2001", "history_type": "conditions"}}, {"name": "get_patient_history", "args": {"patient_id": "P-2001", "history_type": "family"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "get_lab_reference_range", "called": true, "score": 100.0, "args_correct": {"test_name": true}, "optional": false}, {"tool": "order_lab_test", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "get_clinical_guidelines", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "IMP-2", "name": "Implicit: Stroke Risk in AFib Patient", "suite": "1. Implicit Tool Calling", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 7.06, "calls": [{"name": "calculate_chadsvasc_score", "args": {"chf": false, "sex": "male", "age": 71, "diabetes": true, "stroke_history": false, "hypertension": true, "vascular_disease": false}}, {"name": "get_clinical_guidelines", "args": {"condition": "atrial fibrillation"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_chadsvasc_score", "called": true, "score": 100.0, "args_correct": {"age": true, "sex": true, "hypertension": true, "diabetes": true, "stroke_history": true, "chf": true, "vascular_disease": true}, "optional": false}, {"tool": "get_clinical_guidelines", "called": true, "score": 100.0, "args_correct": {"condition": true}, "optional": false}, {"tool": "get_drug_info", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "IMP-3", "name": "Implicit: Worried Parent with Sick Child Symptoms", "suite": "1. Implicit Tool Calling", "overall": 97.8, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 15.0, "safety_order": 100.0, "time": 10.35, "calls": [{"name": "get_differential_diagnosis", "args": {"symptoms": ["high fever", "sore throat", "rash on trunk"], "patient_sex": "male", "patient_age": 8}}, {"name": "order_lab_test", "args": {"test_name": "Rapid Strep Test", "urgency": "urgent", "patient_id": "P-2003"}}, {"name": "order_lab_test", "args": {"test_name": "Complete Blood Count (CBC)", "urgency": "urgent", "patient_id": "P-2003"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_differential_diagnosis", "called": true, "score": 100.0, "args_correct": {"symptoms": true, "patient_age": true, "patient_sex": true}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "urgency": true}, "optional": false}, {"tool": "flag_critical_result", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "NAR-1", "name": "Narrative: Rambling Doctor Note", "suite": "2. Messy Narrative Extraction", "overall": 89.0, "tool_selection": 75.0, "arg_precision": 100.0, "over_calling_penalty": 15.0, "safety_order": 100.0, "time": 25.47, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 82, "height_cm": 163}}, {"name": "calculate_egfr", "args": {"creatinine": 1.3, "age": 67, "sex": "female"}}, {"name": "get_patient_history", "args": {"history_type": "allergies", "patient_id": "P-3001"}}, {"name": "get_patient_history", "args": {"patient_id": "P-3001", "history_type": "medications"}}, {"name": "schedule_followup", "args": {"patient_id": "P-3001", "reason": "Diabetes management and medication adjustment", "provider": "Dr. Patel", "days_from_now": 90}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "schedule_followup", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "days_from_now": true, "provider": true}, "optional": false}]}, {"id": "NAR-2", "name": "Narrative: Abbreviation-Heavy Clinical Note", "suite": "2. Messy Narrative Extraction", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 13.43, "calls": [{"name": "calculate_egfr", "args": {"creatinine": 2.1, "age": 55, "sex": "male"}}, {"name": "calculate_bmi", "args": {"weight_kg": 91, "height_cm": 175}}, {"name": "flag_critical_result", "args": {"severity": "critical", "result_type": "Potassium", "patient_id": "P-3002", "value": "5.6"}}, {"name": "check_drug_interactions", "args": {"drug_b": "metformin", "drug_a": "lisinopril"}}, {"name": "create_referral", "args": {"urgency": "urgent", "patient_id": "P-3002", "reason": "CKD stage 3 with hyperkalemia (K+ 5.6) and elevated creatinine (2.1)", "specialty": "nephrology"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "create_referral", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "specialty": true, "urgency": true}, "optional": false}]}, {"id": "SAF-1", "name": "Safety: Allergy Check Before Prescribing", "suite": "3. Safety-First Ordering", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 7.04, "calls": [{"name": "check_allergy_cross_reactivity", "args": {"proposed_drug": "amoxicillin", "known_allergy": "penicillin"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_allergy_cross_reactivity", "called": true, "score": 100.0, "args_correct": {"known_allergy": true, "proposed_drug": true}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "SAF-2", "name": "Safety: Interaction Check Before New Drug", "suite": "3. Safety-First Ordering", "overall": 91.2, "tool_selection": 100.0, "arg_precision": 75.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 8.39, "calls": [{"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "ibuprofen"}}, {"name": "get_patient_history", "args": {"history_type": "allergies", "patient_id": "P-4002"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "get_patient_history", "called": true, "score": 50.0, "args_correct": {"patient_id": true, "history_type": false}, "optional": true}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": true}]}, {"id": "SAF-3", "name": "Safety: Critical Lab Value Flagging", "suite": "3. Safety-First Ordering", "overall": 91.2, "tool_selection": 100.0, "arg_precision": 75.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 10.34, "calls": [{"name": "flag_critical_result", "args": {"result_type": "Potassium", "severity": "life_threatening", "value": "6.8 mEq/L", "patient_id": "P-4003"}}, {"name": "flag_critical_result", "args": {"result_type": "Creatinine", "severity": "critical", "patient_id": "P-4003", "value": "4.2 mg/dL"}}, {"name": "flag_critical_result", "args": {"patient_id": "P-4003", "value": "129 mEq/L", "result_type": "Sodium", "severity": "warning"}}, {"name": "calculate_egfr", "args": {"sex": "male", "creatinine": 4.2, "age": 60}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "flag_critical_result", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "result_type": true, "severity": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 66.7, "args_correct": {"patient_id": true, "result_type": false, "severity": true}, "optional": false}, {"tool": "flag_critical_result", "called": true, "score": 33.3, "args_correct": {"patient_id": true, "result_type": false, "severity": false}, "optional": false}, {"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": true}]}, {"id": "DEP-1", "name": "Dependency: eGFR \u2192 Dose Adjustment", "suite": "4. Tool Dependency Chains", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 11.24, "calls": [{"name": "calculate_egfr", "args": {"age": 70, "sex": "male", "creatinine": 2.8}}, {"name": "get_dosage_recommendation", "args": {"patient_weight_kg": 75, "patient_age": 70, "drug_name": "vancomycin", "renal_function": "severe"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_egfr", "called": true, "score": 100.0, "args_correct": {"creatinine": true, "age": true, "sex": true}, "optional": false}, {"tool": "get_dosage_recommendation", "called": true, "score": 100.0, "args_correct": {"drug_name": true, "patient_weight_kg": true, "renal_function": true}, "optional": false}]}, {"id": "DEP-2", "name": "Dependency: History \u2192 Interaction Check \u2192 Prescription", "suite": "4. Tool Dependency Chains", "overall": 75.2, "tool_selection": 33.3, "arg_precision": 100.0, "over_calling_penalty": 10.0, "safety_order": 100.0, "time": 10.83, "calls": [{"name": "get_patient_history", "args": {"patient_id": "P-5002", "history_type": "medications"}}, {"name": "get_patient_history", "args": {"history_type": "allergies", "patient_id": "P-5002"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_patient_history", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "history_type": true}, "optional": false}, {"tool": "check_drug_interactions", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "generate_prescription", "called": false, "score": 0.0, "args_correct": {}, "optional": false}]}, {"id": "DIS-1", "name": "Distractor: Simple BMI (20 tools available)", "suite": "5. Distractor Resistance", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 4.19, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 70, "height_cm": 170}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}]}, {"id": "DIS-2", "name": "Distractor: Referral Only (20 tools available)", "suite": "5. Distractor Resistance", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 5.33, "calls": [{"name": "create_referral", "args": {"reason": "suspicious mole", "patient_id": "P-6002", "urgency": "routine", "specialty": "dermatology"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "create_referral", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "specialty": true, "urgency": true}, "optional": false}]}, {"id": "DIS-3", "name": "Distractor: 3 of 20 Needed", "suite": "5. Distractor Resistance", "overall": 30.0, "tool_selection": 0.0, "arg_precision": 0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 11.14, "calls": [], "error": null, "verdict": "FAIL", "call_details": [{"tool": "order_lab_test", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "get_vital_signs_trend", "called": false, "score": 0.0, "args_correct": {}, "optional": false}, {"tool": "send_patient_message", "called": false, "score": 0.0, "args_correct": {}, "optional": false}]}, {"id": "REP-1", "name": "Repeated: Check 4 Drug Interactions", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 17.75, "calls": [{"name": "check_drug_interactions", "args": {"drug_b": "aspirin", "drug_a": "warfarin"}}, {"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "metformin"}}, {"name": "check_drug_interactions", "args": {"drug_b": "lisinopril", "drug_a": "warfarin"}}, {"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "omeprazole"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}, {"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}]}, {"id": "REP-2", "name": "Repeated: 3 Different Lab Orders", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 16.31, "calls": [{"name": "order_lab_test", "args": {"patient_id": "P-7002", "urgency": "routine", "test_name": "CBC", "fasting_required": false}}, {"name": "order_lab_test", "args": {"test_name": "Comprehensive Metabolic Panel", "fasting_required": false, "urgency": "urgent", "patient_id": "P-7002"}}, {"name": "order_lab_test", "args": {"patient_id": "P-7002", "test_name": "Troponin I", "fasting_required": false, "urgency": "stat"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}, {"tool": "order_lab_test", "called": true, "score": 100.0, "args_correct": {"test_name": true, "patient_id": true, "urgency": true}, "optional": false}]}, {"id": "REP-3", "name": "Repeated: Multiple Vitals Trends", "suite": "6. Repeated Tool Calls", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 12.19, "calls": [{"name": "get_vital_signs_trend", "args": {"days_back": 14, "patient_id": "P-7003", "vital_type": "blood_pressure"}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "days_back": 14, "vital_type": "heart_rate"}}, {"name": "get_vital_signs_trend", "args": {"patient_id": "P-7003", "days_back": 14, "vital_type": "temperature"}}, {"name": "get_vital_signs_trend", "args": {"days_back": 14, "patient_id": "P-7003", "vital_type": "spo2"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}, {"tool": "get_vital_signs_trend", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "vital_type": true, "days_back": true}, "optional": false}]}, {"id": "PRC-1", "name": "Precision: Don't Swap Height and Weight", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 3.28, "calls": [{"name": "calculate_bmi", "args": {"weight_kg": 68, "height_cm": 172}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "calculate_bmi", "called": true, "score": 100.0, "args_correct": {"weight_kg": true, "height_cm": true}, "optional": false}]}, {"id": "PRC-2", "name": "Precision: Correct Drug Ordering in Interaction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 4.0, "calls": [{"name": "check_drug_interactions", "args": {"drug_a": "warfarin", "drug_b": "ibuprofen"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_drug_interactions", "called": true, "score": 100.0, "args_correct": {"drug_a": true, "drug_b": true}, "optional": false}]}, {"id": "PRC-3", "name": "Precision: Allergy vs Proposed Drug Direction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 10.48, "calls": [{"name": "check_allergy_cross_reactivity", "args": {"proposed_drug": "furosemide", "known_allergy": "sulfa"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "check_allergy_cross_reactivity", "called": true, "score": 100.0, "args_correct": {"known_allergy": true, "proposed_drug": true}, "optional": false}]}, {"id": "PRC-4", "name": "Precision: Complex Multi-Arg Extraction", "suite": "7. Parameter Precision", "overall": 100.0, "tool_selection": 100.0, "arg_precision": 100.0, "over_calling_penalty": 0.0, "safety_order": 100.0, "time": 6.0, "calls": [{"name": "schedule_followup", "args": {"provider": "Dr. Nakamura", "reason": "post-surgical recovery review", "days_from_now": 42, "patient_id": "P-8001"}}, {"name": "send_patient_message", "args": {"urgency": "high", "message": "Your follow-up has been scheduled in 6 weeks. Please bring your medication list.", "subject": "Surgery Follow-up Scheduled", "patient_id": "P-8001"}}], "error": null, "verdict": "PASS", "call_details": [{"tool": "schedule_followup", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "days_from_now": true, "provider": true}, "optional": false}, {"tool": "send_patient_message", "called": true, "score": 100.0, "args_correct": {"patient_id": true, "subject": true, "urgency": true}, "optional": false}]}];
+const ORINN_SS = {"1. Implicit Tool Calling": 92.2, "2. Messy Narrative Extraction": 94.5, "3. Safety-First Ordering": 98.5, "4. Tool Dependency Chains": 87.6, "5. Distractor Resistance": 100.0, "6. Repeated Tool Calls": 100.0, "7. Parameter Precision": 100.0};
+const GEMINI_SS = {"1. Implicit Tool Calling": 94.4, "2. Messy Narrative Extraction": 94.5, "3. Safety-First Ordering": 94.2, "4. Tool Dependency Chains": 87.6, "5. Distractor Resistance": 76.7, "6. Repeated Tool Calls": 100.0, "7. Parameter Precision": 100.0};
+
+// ═══ Plotly Layout (light theme) ═══
+const lo = {
+  paper_bgcolor: '#FFFFFF',
+  plot_bgcolor: '#FFFFFF',
+  font: { color: '#1a1a2e', family: 'Plus Jakarta Sans', size: 12 },
+  margin: { t: 20, b: 55, l: 50, r: 20 },
+  xaxis: { gridcolor: '#E8E7F3', linecolor: '#D4D2E8' },
+  yaxis: { gridcolor: '#E8E7F3', linecolor: '#D4D2E8' },
+  legend: { bgcolor: 'transparent' },
+};
+const cfg = { responsive: true, displayModeBar: false };
+
+// ═══ TAB SWITCHING ═══
+function switchTab(tab) {
+  document.getElementById('panel-orinn').classList.toggle('active', tab === 'orinn');
+  document.getElementById('panel-gemini').classList.toggle('active', tab === 'gemini');
+
+  const btnO = document.getElementById('tab-orinn');
+  const btnG = document.getElementById('tab-gemini');
+  btnO.classList.toggle('active-orinn', tab === 'orinn');
+  btnO.classList.toggle('', tab !== 'orinn');
+  btnG.classList.toggle('active-gemini', tab === 'gemini');
+
+  setTimeout(() => {}, 50);
+}
+
+// ═══ RENDER FUNCTION ═══
+function renderModel(R, SS, prefix, accentColor) {
+  const good = R.filter(r => !r.error);
+  const avgO = good.reduce((a,r) => a + r.overall, 0) / good.length;
+  const avgT = good.reduce((a,r) => a + r.tool_selection, 0) / good.length;
+  const avgA = good.reduce((a,r) => a + r.arg_precision, 0) / good.length;
+  const avgS = good.reduce((a,r) => a + r.safety_order, 0) / good.length;
+  const passCt = good.filter(r => r.verdict === 'PASS').length;
+
+  function gc(v, t) { return v >= t ? '#059669' : (v >= t*0.7 ? '#d97706' : '#dc2626'); }
+
+  // Score cards
+  const sc = document.getElementById('scores-' + prefix);
+  [
+    [avgO.toFixed(0) + '%', 'Overall', gc(avgO, 70)],
+    [avgT.toFixed(0) + '%', 'Tool Selection', gc(avgT, 80)],
+    [avgA.toFixed(0) + '%', 'Arg Precision', gc(avgA, 80)],
+    [avgS.toFixed(0) + '%', 'Safety Order', gc(avgS, 80)],
+    [passCt + '/' + good.length, 'Pass Rate', passCt === good.length ? '#059669' : '#d97706'],
+  ].forEach(([v, l, c]) => {
+    sc.innerHTML += `<div class="score-card"><div class="value" style="color:${c}">${v}</div><div class="label">${l}</div></div>`;
+  });
+
+  // Table
+  const tbody = document.getElementById('tbody-' + prefix);
+  R.forEach(r => {
+    if (r.error) {
+      tbody.innerHTML += `<tr><td>${r.id}</td><td>${r.name}</td><td colspan="7" class="fail">ERROR</td></tr>`;
+      return;
+    }
+    const oc = r.overall >= 70 ? 'pass' : (r.overall >= 40 ? 'warn' : 'fail');
+    const vc = r.verdict === 'PASS' ? 'pass' : 'fail';
+    tbody.innerHTML += `<tr>
+      <td>${r.id}</td><td>${r.name}</td>
+      <td class="${oc}">${r.overall}%</td>
+      <td>${r.tool_selection}%</td>
+      <td>${r.arg_precision}%</td>
+      <td>-${r.over_calling_penalty}%</td>
+      <td>${r.safety_order}%</td>
+      <td>${r.time.toFixed(1)}s</td>
+      <td class="${vc}">${r.verdict}</td>
+    </tr>`;
+  });
+
+  // Suite chart
+  // Detail
+  const dc = document.getElementById('detail-' + prefix);
+  R.filter(r => !r.error).forEach(r => {
+    let h = `<div style="margin:0.8rem 0 0.3rem;font-weight:700;font-size:0.78rem;color:${accentColor}">${r.id} — ${r.name}</div>`;
+    (r.call_details || []).forEach(cd => {
+      const icon = cd.called ? '✓' : '✗';
+      const color = cd.called ? (cd.score >= 70 ? '#059669' : '#d97706') : '#dc2626';
+      h += `<div class="detail-item"><span style="color:${color};font-weight:700">${icon}</span> <code>${cd.tool}</code> <span style="color:var(--dim)">${cd.score}%${cd.optional ? ' (bonus)' : ''}</span>`;
+      if (cd.called && Object.keys(cd.args_correct).length > 0) {
+        h += ' — ';
+        Object.entries(cd.args_correct).forEach(([k, v]) => {
+          h += `<span class="${v ? 'arg-ok' : 'arg-fail'}">${k}:${v ? '✓' : '✗'}</span> `;
+        });
+      }
+      h += '</div>';
+    });
+    dc.innerHTML += h;
+  });
+}
+
+// ═══ INIT ═══
+renderModel(ORINN_R, ORINN_SS, 'orinn', '#059669');
+renderModel(GEMINI_R, GEMINI_SS, 'gemini', '#2563eb');
+</script>
+</body>
+</html>
