@@ -43,11 +43,7 @@ Overall = 35% tool selection + 35% argument precision + 15% over-calling penalty
 ├── hard_benchmark_engine.py          # Shared engine (tools, scoring, dashboard, reports)
 ├── Hard_tool_calling_Orinn.py        # Orinn-1.6 benchmark runner
 ├── Hard_tool_calling_Gemini.py       # Gemini 3.1 Pro benchmark runner
-├── orinn_tool_benchmark.py           # Easy-mode: 1→40 parallel tool scaling (Orinn)
-├── gemini_tool_benchmark.py          # Easy-mode: 1→40 parallel tool scaling (Gemini)
-├── load_test_suite.py                # CTO-grade load test with live dashboard
-├── load_test_dashboard.py            # Simpler live load test dashboard
-├── combined_benchmark_report.html    # Combined results (Orinn vs Gemini tabs)
+├── Clinical-tool-call-Gemini-3.1-pro-vs-Orinn-1.6-result.html    #results (Orinn vs Gemini tabs)
 └── README.md
 ```
 
