@@ -130,13 +130,7 @@ The benchmark uses 20 realistic clinical workflow tools:
 
 ## View Results
 
-Open `combined_benchmark_report.html` in any browser to see the interactive comparison with tabs for each model.
-
----
-
-## License
-
-MIT
+Open `Clinical-tool-call-Gemini-3.1-pro-vs-Orinn-1.6-result.html` in any browser to see the interactive comparison with tabs for each model.
 
 ---
 
