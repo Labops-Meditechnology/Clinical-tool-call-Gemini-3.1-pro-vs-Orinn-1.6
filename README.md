@@ -72,7 +72,7 @@ All 3 files must be in the same folder:
 Each run produces:
 - **Live terminal dashboard** with real-time scoring
 - **JSON export** with full raw data
-- **HTML report** with interactive charts (LinkedIn-ready)
+- **HTML report** with interactive charts
 
 ### Easy-Mode: Parallel Scaling (1→40 tools)
 
