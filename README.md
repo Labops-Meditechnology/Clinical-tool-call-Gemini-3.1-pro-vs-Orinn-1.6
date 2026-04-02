@@ -134,4 +134,4 @@ Open `Clinical-tool-call-Gemini-3.1-pro-vs-Orinn-1.6-result.html` in any browser
 
 ---
 
-**Built by [Labops Meditechnology](https://github.com/Labops-Meditechnology)**
+**Built by [Labops Meditechnology](https://https://labops.in/)**
